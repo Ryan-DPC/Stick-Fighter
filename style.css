@@ -1,0 +1,306 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Press Start 2P', cursive;
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    overflow: hidden;
+    color: white;
+}
+
+.screen {
+    display: none;
+    width: 100vw;
+    height: 100vh;
+}
+
+.screen.active {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Menu Styles */
+.menu-container {
+    text-align: center;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 3rem;
+    border-radius: 20px;
+    border: 4px solid #00ffff;
+    box-shadow: 0 0 30px rgba(0, 255, 255, 0.5),
+        inset 0 0 20px rgba(0, 255, 255, 0.1);
+    animation: pulse-border 2s infinite;
+}
+
+@keyframes pulse-border {
+
+    0%,
+    100% {
+        box-shadow: 0 0 30px rgba(0, 255, 255, 0.5), inset 0 0 20px rgba(0, 255, 255, 0.1);
+    }
+
+    50% {
+        box-shadow: 0 0 50px rgba(0, 255, 255, 0.8), inset 0 0 30px rgba(0, 255, 255, 0.2);
+    }
+}
+
+.game-title {
+    font-size: 2.5rem;
+    margin-bottom: 2rem;
+    color: #ff00ff;
+    text-shadow: 0 0 10px #ff00ff, 0 0 20px #ff00ff, 0 0 30px #ff00ff;
+    animation: glow 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes glow {
+    from {
+        text-shadow: 0 0 10px #ff00ff, 0 0 20px #ff00ff, 0 0 30px #ff00ff;
+    }
+
+    to {
+        text-shadow: 0 0 20px #ff00ff, 0 0 30px #ff00ff, 0 0 40px #ff00ff, 0 0 50px #ff00ff;
+    }
+}
+
+.menu-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.menu-btn {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 1rem;
+    padding: 1rem 2rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: 3px solid #00ffff;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.menu-btn:hover {
+    transform: translateY(-3px) scale(1.05);
+    box-shadow: 0 0 25px rgba(0, 255, 255, 0.6), 0 6px 20px rgba(0, 0, 0, 0.4);
+    background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+}
+
+.menu-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* How to Play Screen */
+.controls-info {
+    display: flex;
+    gap: 2rem;
+    margin: 2rem 0;
+    justify-content: center;
+}
+
+.player-controls,
+.powerups-info {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1.5rem;
+    border-radius: 10px;
+    border: 2px solid #00ffff;
+}
+
+.player-controls h3,
+.powerups-info h3 {
+    color: #00ffff;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+
+.player-controls p,
+.powerups-info p {
+    font-size: 0.6rem;
+    margin: 0.5rem 0;
+    line-height: 1.5;
+}
+
+.back-btn {
+    margin-top: 2rem;
+}
+
+/* Game Screen */
+#game-screen {
+    flex-direction: column;
+    background: #1a1a2e;
+}
+
+#hud {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 2rem;
+    background: rgba(0, 0, 0, 0.8);
+    border-bottom: 3px solid #00ffff;
+}
+
+.player-hud {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 250px;
+}
+
+.player-name {
+    font-size: 0.7rem;
+    color: #00ffff;
+}
+
+.health-bar-container {
+    width: 100%;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 2px solid #00ffff;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.health-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #00ff00, #33ff33);
+    transition: width 0.3s ease;
+    width: 100%;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+}
+
+.weapon-display {
+    font-size: 0.6rem;
+    color: #ffff00;
+}
+
+.score-display {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-size: 1.5rem;
+}
+
+.versus {
+    font-size: 1rem;
+    color: #ff00ff;
+}
+
+#score-p1,
+#score-p2 {
+    color: #00ffff;
+    min-width: 50px;
+    text-align: center;
+}
+
+#gameCanvas {
+    background: #16213e;
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+}
+
+#round-announcement {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 3rem;
+    color: #ff00ff;
+    text-shadow: 0 0 20px #ff00ff;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+#round-announcement.show {
+    opacity: 1;
+    animation: announce 2s ease-out;
+}
+
+@keyframes announce {
+    0% {
+        transform: translate(-50%, -50%) scale(0.5);
+        opacity: 0;
+    }
+
+    50% {
+        transform: translate(-50%, -50%) scale(1.2);
+        opacity: 1;
+    }
+
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0;
+    }
+}
+
+/* Chat Styles */
+#chat-container {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    width: 300px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 2px solid #444;
+    border-radius: 5px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    z-index: 100;
+}
+
+#chat-messages {
+    height: 150px;
+    overflow-y: auto;
+    color: white;
+    font-family: 'Press Start 2P', cursive;
+    font-size: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+#chat-input {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid #666;
+    color: white;
+    font-family: 'Press Start 2P', cursive;
+    font-size: 10px;
+    padding: 5px;
+    outline: none;
+}
+
+.chat-msg {
+    word-wrap: break-word;
+}
+
+.chat-sender {
+    color: #ffff00;
+    font-weight: bold;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .game-title {
+        font-size: 1.5rem;
+    }
+
+    .menu-btn {
+        font-size: 0.7rem;
+        padding: 0.8rem 1.5rem;
+    }
+
+    .controls-info {
+        flex-direction: column;
+    }
+}
