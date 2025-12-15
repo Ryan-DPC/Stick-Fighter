@@ -20,7 +20,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm install
         # If npm ci fails due to lockfile mismatch, try: npm install
 
       - name: Build EXE
