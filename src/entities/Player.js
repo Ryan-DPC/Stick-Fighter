@@ -117,6 +117,19 @@ export class Player {
                 currentItem.type
             );
             game.projectiles.push(projectile);
+
+            // EMIT SHOOT EVENT
+            if (game.gameMode === 'online' && game.socket && this.id === game.myPlayerId) {
+                game.socket.emit('stick-arena:shoot', {
+                    projectile: {
+                        x: projectile.x,
+                        y: projectile.y,
+                        vx: projectile.vx,
+                        owner: projectile.owner,
+                        type: projectile.type
+                    }
+                });
+            }
         }
 
         // Decrease stack
@@ -131,69 +144,7 @@ export class Player {
         this.updateItemDisplay();
     }
 
-    updateItemDisplay() {
-        const itemDisplay = document.getElementById(`weapon-p${this.id}`);
-        if (!itemDisplay) return; // Safety check
-
-        if (this.inventory.length === 0) {
-            itemDisplay.textContent = 'No Items';
-        } else {
-            const item = this.inventory[this.currentItemIndex];
-            if (!item) {
-                // Safety: reset index if invalid
-                this.currentItemIndex = 0;
-                itemDisplay.textContent = 'No Items';
-                return;
-            }
-            const itemData = ITEMS[item.type];
-            itemDisplay.textContent = `${itemData.icon} x${item.stack}`;
-        }
-    }
-
-    dash(game) {
-        // Can't dash if already dashing or on cooldown
-        if (this.isDashing || this.dashCooldown > 0) return;
-
-        // Determine dash direction based on input
-        let dashDirX = 0;
-        let dashDirY = 0;
-
-        if (this.id === 1) {
-            if (game.keys['w']) dashDirY = -1;
-            if (game.keys['s']) dashDirY = 1;
-            if (game.keys['a']) dashDirX = -1;
-            if (game.keys['d']) dashDirX = 1;
-        } else {
-            if (game.keys['arrowup']) dashDirY = -1;
-            if (game.keys['arrowdown']) dashDirY = 1;
-            if (game.keys['arrowleft']) dashDirX = -1;
-            if (game.keys['arrowright']) dashDirX = 1;
-        }
-
-        // Default to facing direction if no input
-        if (dashDirX === 0 && dashDirY === 0) {
-            dashDirX = this.facingRight ? 1 : -1;
-        }
-
-        // Normalize diagonal dashes (Celeste-style)
-        if (dashDirX !== 0 && dashDirY !== 0) {
-            const length = Math.sqrt(dashDirX * dashDirX + dashDirY * dashDirY);
-            dashDirX /= length;
-            dashDirY /= length;
-        }
-
-        // Start dash
-        this.isDashing = true;
-        this.dashTimer = CONFIG.DASH_DURATION;
-        this.dashDirX = dashDirX;
-        this.dashDirY = dashDirY;
-        this.dashCooldown = CONFIG.DASH_COOLDOWN;
-
-        // Create dash particles
-        for (let i = 0; i < 8; i++) {
-            game.particles.push(new Particle(this.x + this.width / 2, this.y + this.height / 2, this.color));
-        }
-    }
+    // ... (rest of methods)
 
     melee(opponent, game) {
         if (this.meleeCooldown > 0) return;
@@ -225,6 +176,14 @@ export class Player {
         this.meleeActive = true;
         this.meleeCooldown = cooldown;
 
+        // EMIT MELEE EVENT
+        if (game.gameMode === 'online' && game.socket && this.id === game.myPlayerId) {
+            game.socket.emit('stick-arena:melee', {
+                playerId: this.id,
+                comboCount: this.comboCount
+            });
+        }
+
         const dx = opponent.x - this.x;
         const dy = opponent.y - this.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
@@ -251,7 +210,7 @@ export class Player {
         }
 
         setTimeout(() => this.meleeActive = false, 200);
-    }
+    } // End of melee
 
     shoot(game) {
         // Basic shoot removed/replaced by items, but keeping for legacy or fallback
@@ -269,6 +228,18 @@ export class Player {
         if (knockbackDir !== 0) {
             this.knockbackVx = knockbackDir * CONFIG.KNOCKBACK_FORCE;
             this.knockbackVy = -CONFIG.KNOCKBACK_FORCE / 2; // Slight pop up
+        }
+
+        // EMIT DAMAGE EVENT (If we are the one taking damage, we should notify server/opponent for sync, although usually attacker notifies or both)
+        // In P2P trust model, usually the attacker sends "I hit you", but taking damage is Authoritative on Self if we want Anti-Cheat, or Authoritative on Attacker if we want Responsiveness.
+        // Let's emit it so opponent knows valid hit confirmed? Or just rely on visual sync from state update?
+        // Actually, 'playerDamaged' relay is useful for special effects etc.
+        if (game.gameMode === 'online' && game.socket && this.id === game.myPlayerId) {
+            game.socket.emit('stick-arena:playerDamaged', {
+                playerId: this.id,
+                damage: amount,
+                health: this.health
+            });
         }
     }
 

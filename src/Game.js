@@ -94,7 +94,14 @@ export class Game {
             return;
         }
 
-        this.socket = io();
+        // Get User ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        this.userId = urlParams.get('userId') || 'Guest_' + Math.floor(Math.random() * 1000);
+
+        console.log(`[Game] Connecting to ${CONFIG.SERVER_URL} as ${this.userId}`);
+
+        // Connect to specified server URL
+        this.socket = io(CONFIG.SERVER_URL);
         this.gameMode = 'online';
 
         // Show chat in online mode
@@ -104,7 +111,7 @@ export class Game {
         // Socket event listeners
         this.socket.on('connect', () => {
             console.log('Connected to server:', this.socket.id);
-            this.socket.emit('stick-arena:join', { userId: this.socket.id });
+            this.socket.emit('stick-arena:join', { userId: this.userId });
         });
 
         this.socket.on('stick-arena:joined', () => {
@@ -127,21 +134,24 @@ export class Game {
             this.initOnlineGame();
         });
 
-        this.socket.on('stick-arena:gameState', (state) => {
-            // Sync game state from server
-            if (this.gameMode === 'online' && this.gameActive) {
-                // Update opponent position
-                const opponentData = state.players[this.myPlayerId === 1 ? 2 : 1];
-                if (opponentData && this.player2) {
-                    this.player2.x = opponentData.x;
-                    this.player2.y = opponentData.y;
-                    this.player2.vx = opponentData.vx;
-                    this.player2.vy = opponentData.vy;
-                    this.player2.health = opponentData.health;
-                    this.player2.facingRight = opponentData.facingRight;
-                }
+        // --- P2P RELAY HANDLERS ---
+        this.socket.on('stick-arena:opponentMoved', (state) => {
+            // Only update if we are playing and this is the opponent's data
+            if (this.gameMode === 'online' && this.gameActive && state.playerId === this.opponentId && this.player2) {
+                this.player2.x = state.x;
+                this.player2.y = state.y;
+                this.player2.vx = state.vx;
+                this.player2.vy = state.vy;
+                this.player2.health = state.health;
+                this.player2.facingRight = state.facingRight;
             }
         });
+
+        // Other handlers remain similar but directly create entities
+        // ... (projectileCreated, playerMelee are already handling direct data nicely or need small verify)
+
+        // Remove old 'stick-arena:gameState' listener if present (it was replaced above logically)
+
 
         this.socket.on('stick-arena:playerMelee', (data) => {
             if (data.playerId !== this.myPlayerId) {

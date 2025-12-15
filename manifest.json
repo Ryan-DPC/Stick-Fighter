@@ -1,12 +1,12 @@
 {
-  "gameId": "stick-fighting",
+  "gameId": "Stick-Fighter",
   "gameName": "Stick Fighting",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "developer": "MiniGames Studio",
   "description": "Stick Fighting",
   "genre": "Multiplayer",
   "platform": "exe",
-  "entryPoint": "index.html",
+  "entryPoint": "Stick-Fighter.exe",
   "mainFile": "index.html",
   "files": [
     {
@@ -22,6 +22,5 @@
   "price": 0,
   "requiresAuth": true,
   "requiresNetwork": true,
-  "authEndpoint": "/api/games/stick-fighting/auth",
-  "updatedAt": "2025-01-30T00:00:00.000Z"
+  "updatedAt": "2025-12-15T12:00:00.000Z"
 }

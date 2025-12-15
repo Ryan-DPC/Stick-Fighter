@@ -1,5 +1,6 @@
 // Game Configuration
 export const CONFIG = {
+    SERVER_URL: 'http://localhost:3002',
     CANVAS_WIDTH: 1200,
     CANVAS_HEIGHT: 600,
     PLAYER_SIZE: 20,

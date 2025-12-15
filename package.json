@@ -2,10 +2,12 @@
     "name": "stick-fighting-arena",
     "version": "1.0.0",
     "description": "A pixel art stick fighting game with local and online multiplayer",
-    "main": "server.js",
+    "main": "electron_main.js",
     "scripts": {
         "start": "node server.js",
-        "dev": "node server.js"
+        "dev": "node server.js",
+        "app:start": "electron .",
+        "app:build": "electron-builder"
     },
     "keywords": [
         "game",
@@ -18,5 +20,21 @@
     "dependencies": {
         "express": "^4.18.2",
         "socket.io": "^4.6.1"
+    },
+    "devDependencies": {
+        "electron": "^28.1.0",
+        "electron-builder": "^24.9.1"
+    },
+    "build": {
+        "appId": "com.stickfighter.game",
+        "productName": "Stick Fighter",
+        "files": [
+            "**/*",
+            "!src/**/*.ts"
+        ],
+        "win": {
+            "target": "nsis",
+            "icon": "icon.png"
+        }
     }
 }
