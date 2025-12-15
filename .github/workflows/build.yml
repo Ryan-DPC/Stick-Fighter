@@ -39,9 +39,14 @@ jobs:
           path: dist/*.exe
           retention-days: 5
 
+      - name: Generate Tag
+        id: tag
+        run: |
+          echo "RELEASE_TAG=v1.0.${{ github.run_number }}" >> $env:GITHUB_ENV
+
       - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           files: dist/*.exe
           generate_release_notes: true
