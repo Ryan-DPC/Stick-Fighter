@@ -6,7 +6,7 @@
   "description": "Stick Fighting",
   "genre": "Multiplayer",
   "platform": "exe",
-  "entryPoint": "Stick-Fighter.exe",
+  "entryPoint": "Game.exe",
   "mainFile": "index.html",
   "files": [
     {
