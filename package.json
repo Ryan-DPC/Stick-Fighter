@@ -27,7 +27,7 @@
     },
     "build": {
         "appId": "com.stickfighter.game",
-        "productName": "Stick Fighter",
+        "productName": "Stick-Fighter",
         "files": [
             "**/*",
             "!src/**/*.ts"
