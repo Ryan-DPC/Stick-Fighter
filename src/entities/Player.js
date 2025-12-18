@@ -49,6 +49,10 @@ export class Player {
         this.dashCooldown = 0;
         this.dashDirX = 0;
         this.dashDirY = 0;
+
+        // Initial UI Update
+        this.updateHealthBar();
+        this.updateItemDisplay();
     }
 
     // Item inventory management
@@ -83,6 +87,42 @@ export class Player {
         this.updateItemDisplay();
     }
 
+    updateHealthBar() {
+        // Find health bar element
+        const bar = document.getElementById(`health-p${this.id}`);
+        if (bar) {
+            const percent = (this.health / this.maxHealth) * 100;
+            bar.style.width = `${percent}%`;
+        }
+    }
+
+    updateItemDisplay() {
+        // Find item container
+        const container = document.getElementById(`items-p${this.id}`);
+        if (!container) return;
+
+        container.innerHTML = ''; // Clear
+
+        this.inventory.forEach((item, index) => {
+            const slot = document.createElement('div');
+            slot.className = 'item-slot';
+            if (index === this.currentItemIndex) slot.classList.add('selected');
+
+            // Get item config
+            const itemConfig = ITEMS[item.type];
+            if (itemConfig) {
+                slot.textContent = itemConfig.icon + ' x' + item.stack;
+                slot.style.borderColor = itemConfig.color;
+                slot.title = itemConfig.name;
+            } else {
+                slot.textContent = '?';
+            }
+
+            container.appendChild(slot);
+        });
+    }
+
+
     useItem(game) {
         if (this.inventory.length === 0) return;
 
@@ -96,18 +136,18 @@ export class Player {
             this.activeBuff = currentItem.type;
             this.buffTimer = CONFIG.ITEM_DURATION;
 
-            // Immediate effect for Vampire Dash
-            if (currentItem.type === 'VAMPIRE_DASH') {
-                this.health = Math.max(1, this.health - 5); // Drain 5 HP
+            // Immediate effect for Berserk (Old Vampire Dash)
+            if (currentItem.type === 'BERSERK') {
+                this.health = Math.max(1, this.health - 5); // Sacrifice 5 HP
                 this.updateHealthBar();
             }
         } else if (itemData.type === 'heal') {
-            // Blood Orb
+            // Health Potion (Old Blood Orb)
             this.health = Math.min(this.maxHealth, this.health + itemData.value);
             this.updateHealthBar();
             game.createHitParticles(this.x + this.width / 2, this.y + this.height / 2, itemData.color);
         } else if (itemData.type === 'projectile') {
-            // Launch projectile (Hellfire or Bat Swarm)
+            // Launch projectile
             const dir = this.facingRight ? 1 : -1;
             const projectile = new Projectile(
                 this.x + (this.facingRight ? this.width : 0),
@@ -434,12 +474,11 @@ export class Player {
         }
     }
 
-    draw(ctx) {
+    draw(ctx, game) {
         // Draw dash trail effect
         if (this.isDashing) {
             ctx.globalAlpha = 0.4;
             ctx.fillStyle = this.color;
-            // Draw afterimage behind the player
             ctx.fillRect(this.x - this.dashDirX * 10, this.y - this.dashDirY * 10, this.width, this.height);
             ctx.globalAlpha = 1;
         }
@@ -449,49 +488,69 @@ export class Player {
             ctx.strokeStyle = ITEMS.SHIELD.color;
             ctx.lineWidth = 3;
             ctx.beginPath();
-            ctx.arc(this.x + this.width / 2, this.y + this.height / 2, this.width + 5, 0, Math.PI * 2);
+            ctx.arc(this.x + this.width / 2, this.y + this.height / 2, this.width + 10, 0, Math.PI * 2);
             ctx.stroke();
         }
 
-        // Draw dash glow during dash
-        if (this.isDashing) {
-            ctx.shadowBlur = 20;
-            ctx.shadowColor = this.color;
-        }
+        // Sprite Rendering
+        if (game && game.spritesLoaded && game.spriteSheet) {
+            const frameWidth = game.spriteSheet.width / 3;
+            const frameHeight = game.spriteSheet.height / 2;
 
-        // Draw player body
-        ctx.fillStyle = this.color;
+            // Determine Row (Player 1 = 0, Player 2 = 1)
+            const row = (this.id === 1) ? 0 : 1;
 
-        // Head
-        ctx.fillRect(this.x + 5, this.y, 10, 10);
+            // Determine Col (Animation State)
+            let col = 0; // Standing
+            if (this.meleeActive) {
+                col = 2; // Attacking
+            } else if (Math.abs(this.vx) > 0.5) {
+                // Running Animation (Toggle frame based on position or time? simplified to just run pose)
+                // If we want animation, we can use game.roundTime or a tick
+                // For now, static 'Run' pose is fine, or toggle based on x
+                col = 1;
+            }
 
-        // Body
-        ctx.fillRect(this.x + 7, this.y + 10, 6, 15);
+            const sx = col * frameWidth;
+            const sy = row * frameHeight;
 
-        // Arms
-        if (this.meleeActive) {
-            const armX = this.facingRight ? this.x + 13 : this.x - 8;
-            ctx.fillRect(armX, this.y + 12, 8, 4);
+            ctx.save();
+            ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+
+            if (!this.facingRight) {
+                ctx.scale(-1, 1);
+            }
+
+            // Draw Sprite (Adjust size to fit hitbox or slightly larger)
+            // Hitbox is 20x40. Sprite might be 32x32 or 64x64.
+            // Let's assume proportional drawing approx 64x64 centered to ensure it covers the hitbox
+            const drawSize = 64;
+            ctx.drawImage(
+                game.spriteSheet,
+                sx, sy, frameWidth, frameHeight,
+                -drawSize / 2, -drawSize / 2, drawSize, drawSize
+            );
+
+            ctx.restore();
+
         } else {
-            ctx.fillRect(this.x + 3, this.y + 12, 5, 4);
-            ctx.fillRect(this.x + 12, this.y + 12, 5, 4);
+            // FALLBACK TO RECTANGLE
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+
+            // Arms (Fallback)
+            if (this.meleeActive) {
+                const armX = this.facingRight ? this.x + 13 : this.x - 8;
+                ctx.fillStyle = this.color;
+                ctx.fillRect(armX, this.y + 12, 8, 4);
+                // Weapon
+                ctx.fillStyle = '#ffff00';
+                const weaponX = this.facingRight ? this.x + this.width : this.x - 10;
+                ctx.fillRect(weaponX, this.y + 15, 10, 3);
+            }
         }
 
-        // Legs
-        ctx.fillRect(this.x + 5, this.y + 25, 4, 15);
-        ctx.fillRect(this.x + 11, this.y + 25, 4, 15);
-
-        // Reset shadow
-        ctx.shadowBlur = 0;
-
-        // Draw weapon indicator
-        if (this.meleeActive) {
-            ctx.fillStyle = '#ffff00';
-            const weaponX = this.facingRight ? this.x + this.width : this.x - 10;
-            ctx.fillRect(weaponX, this.y + 15, 10, 3);
-        }
-
-        // Speed effect
+        // Speed effect particles or tint
         if (this.activeBuff === 'SPEED') {
             ctx.fillStyle = ITEMS.SPEED.color;
             ctx.globalAlpha = 0.3;
@@ -514,3 +573,4 @@ export class Player {
         }
     }
 }
+

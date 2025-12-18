@@ -3,6 +3,8 @@ import { Player } from './entities/Player.js';
 import { Projectile } from './entities/Projectile.js';
 import { Powerup } from './entities/Powerup.js';
 import { Particle } from './entities/Particle.js';
+import { MenuManager } from './managers/MenuManager.js';
+import { NetworkManager } from './managers/NetworkManager.js';
 
 export class Game {
     constructor() {
@@ -10,6 +12,10 @@ export class Game {
         this.ctx = this.canvas.getContext('2d');
         this.canvas.width = CONFIG.CANVAS_WIDTH;
         this.canvas.height = CONFIG.CANVAS_HEIGHT;
+
+        // Managers
+        this.menuManager = new MenuManager(this);
+        this.networkManager = new NetworkManager(this);
 
         this.player1 = null;
         this.player2 = null;
@@ -20,273 +26,77 @@ export class Game {
 
         this.keys = {};
         this.gameActive = false;
+        this.gameMode = 'local';
         this.roundTime = CONFIG.ROUND_TIME;
         this.scores = { p1: 0, p2: 0 };
         this.isChatting = false;
 
-        this.initMenu();
+        // Visual Effects
+        this.shakeTime = 0;
+        this.shakeIntensity = 0;
+
+        // Sprite Loading with Chroma Key
+        this.spritesLoaded = false;
+        const tempImage = new Image();
+        tempImage.src = 'assets/sprites.png';
+        tempImage.onload = () => {
+            // Create offscreen canvas to process image
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = tempImage.width;
+            canvas.height = tempImage.height;
+            ctx.drawImage(tempImage, 0, 0);
+
+            // Get Data
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imgData.data;
+
+            // Remove Green (#00FF00) and surrounding shades
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+                // If Green is bright and dominant
+                if (g > 150 && r < 100 && b < 100) {
+                    data[i + 3] = 0; // Set Alpha to 0
+                }
+                // Additional tolerance
+                if (g > r + 30 && g > b + 30) {
+                    data[i + 3] = 0;
+                }
+            }
+
+            ctx.putImageData(imgData, 0, 0);
+
+            // Set final sprite sheet
+            this.spriteSheet = new Image();
+            this.spriteSheet.src = canvas.toDataURL();
+            this.spritesLoaded = true;
+            console.log('Sprites processed and loaded!');
+        };
+
         this.setupEventListeners();
         this.createMap();
-    }
 
-    initMenu() {
-        const localBtn = document.getElementById('local-btn');
-        const onlineBtn = document.getElementById('online-btn');
-        const howToPlayBtn = document.getElementById('how-to-play-btn');
-        const backBtn = document.getElementById('back-to-menu');
-
-        localBtn.addEventListener('click', () => this.startLocalGame());
-        howToPlayBtn.addEventListener('click', () => this.showHowToPlay());
-        backBtn.addEventListener('click', () => this.showMenu());
-        onlineBtn.addEventListener('click', () => this.startOnlineGame());
-    }
-
-    showMenu() {
-        const menuScreen = document.getElementById('menu-screen');
-        const gameScreen = document.getElementById('game-screen');
-        const howToPlayScreen = document.getElementById('how-to-play-screen');
-
-        // Reset styles
-        menuScreen.style.display = '';
-        gameScreen.style.display = '';
-        howToPlayScreen.style.display = '';
-
-        menuScreen.classList.add('active');
-        howToPlayScreen.classList.remove('active');
-        gameScreen.classList.remove('active');
-
-        this.gameActive = false;
-    }
-
-    showHowToPlay() {
-        document.getElementById('menu-screen').classList.remove('active');
-        document.getElementById('how-to-play-screen').classList.add('active');
+        // Initial State
+        this.menuManager.showMenu();
     }
 
     startLocalGame() {
         console.log('Starting local game...');
-        try {
-            const menuScreen = document.getElementById('menu-screen');
-            const gameScreen = document.getElementById('game-screen');
-
-            // Force hide menu
-            menuScreen.classList.remove('active');
-            menuScreen.style.display = 'none';
-
-            // Show game
-            gameScreen.classList.add('active');
-            gameScreen.style.display = 'flex';
-
-            this.gameMode = 'local';
-            // Hide chat in local mode
-            document.getElementById('chat-container').style.display = 'none';
-            this.initGame();
-        } catch (error) {
-            console.error('Error starting game:', error);
-            alert('Error starting game. Check console for details.');
-        }
+        this.gameMode = 'local';
+        this.menuManager.startGameUI(false);
+        this.initGame();
     }
 
     startOnlineGame() {
-        // Initialize Socket.io connection
-        if (!window.io) {
-            alert('Socket.io not loaded. Please ensure the server is running!');
-            return;
-        }
+        this.networkManager.connect();
+    }
 
-        // Get User ID from URL
-        const urlParams = new URLSearchParams(window.location.search);
-        this.userId = urlParams.get('userId') || 'Guest_' + Math.floor(Math.random() * 1000);
-
-        console.log(`[Game] Connecting to ${CONFIG.SERVER_URL} as ${this.userId}`);
-
-        // Connect to specified server URL
-        this.socket = io(CONFIG.SERVER_URL);
+    onMatchFound(data) {
         this.gameMode = 'online';
-
-        // Show chat in online mode
-        document.getElementById('chat-container').style.display = 'flex';
-        this.initChat();
-
-        // Socket event listeners
-        this.socket.on('connect', () => {
-            console.log('Connected to server:', this.socket.id);
-            this.socket.emit('stick-arena:join', { userId: this.userId });
-        });
-
-        this.socket.on('stick-arena:joined', () => {
-            console.log('Joined stick arena');
-            this.socket.emit('stick-arena:findMatch', { userId: this.socket.id });
-        });
-
-        this.socket.on('stick-arena:waiting', (data) => {
-            this.showAnnouncement('SEARCHING FOR OPPONENT...');
-        });
-
-        this.socket.on('stick-arena:matchFound', (data) => {
-            console.log('Match found!', data);
-            this.myPlayerId = data.playerId;
-            this.opponentId = data.opponentId;
-            this.roomId = data.roomId;
-
-            document.getElementById('menu-screen').classList.remove('active');
-            document.getElementById('game-screen').classList.add('active');
-            this.initOnlineGame();
-        });
-
-        // --- P2P RELAY HANDLERS ---
-        this.socket.on('stick-arena:opponentMoved', (state) => {
-            // Only update if we are playing and this is the opponent's data
-            if (this.gameMode === 'online' && this.gameActive && state.playerId === this.opponentId && this.player2) {
-                this.player2.x = state.x;
-                this.player2.y = state.y;
-                this.player2.vx = state.vx;
-                this.player2.vy = state.vy;
-                this.player2.health = state.health;
-                this.player2.facingRight = state.facingRight;
-            }
-        });
-
-        // Other handlers remain similar but directly create entities
-        // ... (projectileCreated, playerMelee are already handling direct data nicely or need small verify)
-
-        // Remove old 'stick-arena:gameState' listener if present (it was replaced above logically)
-
-
-        this.socket.on('stick-arena:playerMelee', (data) => {
-            if (data.playerId !== this.myPlayerId) {
-                // Opponent performed melee
-                this.player2.meleeActive = true;
-                setTimeout(() => this.player2.meleeActive = false, 200);
-            }
-        });
-
-        this.socket.on('stick-arena:projectileCreated', (projectile) => {
-            // Add opponent's projectile
-            if (projectile.owner !== this.myPlayerId) {
-                this.projectiles.push(new Projectile(
-                    projectile.x,
-                    projectile.y,
-                    projectile.vx > 0 ? 1 : -1,
-                    projectile.owner,
-                    projectile.type || 'HELLFIRE'
-                ));
-            }
-        });
-
-        this.socket.on('stick-arena:playerDamaged', (data) => {
-            if (data.playerId === this.myPlayerId) {
-                this.player1.takeDamage(data.damage, this);
-            }
-        });
-
-        this.socket.on('stick-arena:roundEnd', (data) => {
-            if (data.winnerId === this.myPlayerId) {
-                this.scores.p1++;
-                this.showAnnouncement('YOU WIN!');
-            } else {
-                this.scores.p2++;
-                this.showAnnouncement('YOU LOSE!');
-            }
-            document.getElementById('score-p1').textContent = this.scores.p1;
-            document.getElementById('score-p2').textContent = this.scores.p2;
-
-            setTimeout(() => this.initOnlineGame(), 3000);
-        });
-
-        this.socket.on('stick-arena:opponentDisconnected', (data) => {
-            this.gameActive = false;
-            alert('Opponent disconnected!');
-            this.showMenu();
-            if (this.socket) {
-                this.socket.disconnect();
-            }
-        });
-
-        this.socket.on('disconnect', () => {
-            console.log('Disconnected from server');
-        });
-    }
-
-    initChat() {
-        const chatInput = document.getElementById('chat-input');
-
-        if (chatInput) {
-            // Remove old listeners to avoid duplicates if called multiple times
-            const newChatInput = chatInput.cloneNode(true);
-            chatInput.parentNode.replaceChild(newChatInput, chatInput);
-
-            newChatInput.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && newChatInput.value.trim() !== '') {
-                    this.socket.emit('stick-arena:chat', { message: newChatInput.value.trim() });
-                    this.addChatMessage('Me', newChatInput.value.trim());
-                    newChatInput.value = '';
-                }
-                e.stopPropagation();
-            });
-
-            newChatInput.addEventListener('focus', () => this.isChatting = true);
-            newChatInput.addEventListener('blur', () => {
-                this.isChatting = false;
-                this.canvas.focus();
-            });
-        }
-
-        this.socket.off('stick-arena:chat'); // Remove old listener
-        this.socket.on('stick-arena:chat', (data) => {
-            if (data.senderId !== this.socket.id) {
-                this.addChatMessage('Opponent', data.message);
-            }
-        });
-    }
-
-    addChatMessage(sender, message) {
-        const chatMessages = document.getElementById('chat-messages');
-        if (chatMessages) {
-            const msgElement = document.createElement('div');
-            msgElement.className = 'chat-msg';
-            msgElement.innerHTML = `<span class="chat-sender">${sender}:</span> ${message}`;
-            chatMessages.appendChild(msgElement);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-    }
-
-    initOnlineGame() {
-        // Create local player and remote player dummy
-        if (this.myPlayerId === 1) {
-            this.player1 = new Player(200, 300, '#00ffff', 1);
-            this.player2 = new Player(1000, 300, '#ff00ff', 2);
-        } else {
-            this.player1 = new Player(1000, 300, '#00ffff', 2);
-            this.player2 = new Player(200, 300, '#ff00ff', 1);
-        }
-
-        this.projectiles = [];
-        this.powerups = [];
-        this.particles = [];
-        this.roundTime = CONFIG.ROUND_TIME;
-
-        this.gameActive = true;
-        this.gameLoop();
-        this.spawnPowerup();
-        this.syncInterval = setInterval(() => this.syncOnlineState(), 50);
-    }
-
-    syncOnlineState() {
-        if (!this.socket || !this.gameActive || this.gameMode !== 'online') return;
-
-        // Send our player state to server
-        this.socket.emit('stick-arena:playerUpdate', {
-            playerId: this.myPlayerId,
-            state: {
-                x: this.player1.x,
-                y: this.player1.y,
-                vx: this.player1.vx,
-                vy: this.player1.vy,
-                health: this.player1.health,
-                facingRight: this.player1.facingRight
-            }
-        });
+        this.menuManager.startGameUI(true);
+        this.initOnlineGame();
     }
 
     initGame() {
@@ -294,14 +104,36 @@ export class Game {
         this.player1 = new Player(200, 300, '#00ffff', 1);
         this.player2 = new Player(1000, 300, '#ff00ff', 2);
 
-        this.projectiles = [];
-        this.powerups = [];
-        this.particles = [];
-        this.roundTime = CONFIG.ROUND_TIME;
+        this.resetRoundState();
 
         this.gameActive = true;
         this.gameLoop();
         this.spawnPowerup();
+    }
+
+    initOnlineGame() {
+        // Create local player and remote player dummy
+        if (this.networkManager.myPlayerId === 1) {
+            this.player1 = new Player(200, 300, '#00ffff', 1);
+            this.player2 = new Player(1000, 300, '#ff00ff', 2);
+        } else {
+            this.player1 = new Player(1000, 300, '#00ffff', 2);
+            this.player2 = new Player(200, 300, '#ff00ff', 1);
+        }
+
+        this.resetRoundState();
+
+        this.gameActive = true;
+        this.gameLoop();
+        this.spawnPowerup();
+        this.syncInterval = setInterval(() => this.syncOnlineState(), 50);
+    }
+
+    resetRoundState() {
+        this.projectiles = [];
+        this.powerups = [];
+        this.particles = [];
+        this.roundTime = CONFIG.ROUND_TIME;
     }
 
     createMap() {
@@ -316,44 +148,42 @@ export class Game {
 
     setupEventListeners() {
         document.addEventListener('keydown', (e) => {
-            if (this.isChatting) return; // Don't move if chatting
+            if (this.isChatting) return;
 
             this.keys[e.key.toLowerCase()] = true;
 
             // Player 1 controls
-            if (e.key === ' ' && this.gameActive) {
-                e.preventDefault();
-                this.player1.useItem(this); // SPACE uses item
-            }
-            if (e.key.toLowerCase() === 'q' && this.gameActive) {
-                this.player1.switchItemPrev(); // Q = previous item
-            }
-            if (e.key.toLowerCase() === 'e' && this.gameActive) {
-                this.player1.switchItemNext(); // E = next item
-            }
-            if (e.key === 'Shift' && this.gameActive) {
-                e.preventDefault();
-                this.player1.dash(this); // SHIFT = dash
+            if (this.gameActive && this.player1) {
+                if (e.key === ' ') { e.preventDefault(); this.player1.useItem(this); }
+                if (e.key.toLowerCase() === 'e') this.player1.melee(this.player2, this); // Attack P1
+                if (e.key.toLowerCase() === 'q') this.player1.switchItemNext(); // Switch Item P1 (Moved from E)
+                if (e.key === 'Shift') { e.preventDefault(); this.player1.dash(this); }
             }
 
-            // Player 2 controls
-            if (e.key === 'Enter' && this.gameActive) {
-                e.preventDefault();
-                this.player2.useItem(this); // ENTER uses item
-            }
-            if (e.key === '/' && this.gameActive) {
-                this.player2.switchItemPrev(); // / = previous item
-            }
-            if (e.key.toLowerCase() === 'rshift' && this.gameActive) {
-                this.player2.switchItemNext(); // Right SHIFT = next item
-            }
-            if (e.key === 'Control' && this.gameActive) {
-                this.player2.dash(this); // CTRL = dash
+            // Player 2 controls (Only in Local Mode)
+            if (this.gameMode === 'local' && this.gameActive && this.player2) {
+                if (e.key === 'Enter') { e.preventDefault(); this.player2.useItem(this); }
+                if (e.key.toLowerCase() === 'l') this.player2.melee(this.player1, this); // Attack P2
+                if (e.key.toLowerCase() === 'k') this.player2.switchItemNext(); // Switch Item P2
+                if (e.key === 'Control') this.player2.dash(this);
             }
         });
 
         document.addEventListener('keyup', (e) => {
             this.keys[e.key.toLowerCase()] = false;
+        });
+    }
+
+    syncOnlineState() {
+        if (!this.gameActive || this.gameMode !== 'online') return;
+
+        this.networkManager.sendPlayerUpdate({
+            x: this.player1.x,
+            y: this.player1.y,
+            vx: this.player1.vx,
+            vy: this.player1.vy,
+            health: this.player1.health,
+            facingRight: this.player1.facingRight
         });
     }
 
@@ -373,9 +203,14 @@ export class Game {
     update() {
         if (!this.gameActive) return;
 
+        // Shake Effect
+        if (this.shakeTime > 0) {
+            this.shakeTime--;
+        }
+
         // Update players
-        this.player1.update(this);
-        this.player2.update(this);
+        if (this.player1) this.player1.update(this);
+        if (this.player2) this.player2.update(this);
 
         // Update projectiles
         this.projectiles = this.projectiles.filter(p => {
@@ -387,6 +222,7 @@ export class Game {
                 if (!p.hitTargets.has(this.player1.id)) {
                     this.player1.takeDamage(CONFIG.PROJECTILE_DAMAGE, this);
                     this.createHitParticles(p.x, p.y, '#ff0000');
+                    this.screenShake(10, 5); // Shake!
                     p.hitTargets.add(this.player1.id);
                     if (!p.piercing) return false;
                 }
@@ -395,6 +231,7 @@ export class Game {
                 if (!p.hitTargets.has(this.player2.id)) {
                     this.player2.takeDamage(CONFIG.PROJECTILE_DAMAGE, this);
                     this.createHitParticles(p.x, p.y, '#ff0000');
+                    this.screenShake(10, 5); // Shake!
                     p.hitTargets.add(this.player2.id);
                     if (!p.piercing) return false;
                 }
@@ -405,21 +242,26 @@ export class Game {
 
         // Update powerups/items
         this.powerups = this.powerups.filter(p => {
+            // Logic for p1 and p2 pickup
             if (this.checkCollision(p, this.player1)) {
                 if (this.player1.pickupItem(p.type)) {
-                    this.createHitParticles(p.x, p.y, ITEMS[p.type].color);
+                    const itemColor = ITEMS[p.type] ? ITEMS[p.type].color : '#ffffff';
+                    this.createHitParticles(p.x, p.y, itemColor);
                     return false; // Remove item
                 }
-                return true; // Keep item if inventory full
+                // If player1's inventory is full, the item remains on the map
+                return true;
             }
             if (this.checkCollision(p, this.player2)) {
                 if (this.player2.pickupItem(p.type)) {
-                    this.createHitParticles(p.x, p.y, ITEMS[p.type].color);
+                    const itemColor = ITEMS[p.type] ? ITEMS[p.type].color : '#ffffff';
+                    this.createHitParticles(p.x, p.y, itemColor);
                     return false; // Remove item
                 }
-                return true; // Keep item if inventory full
+                // If player2's inventory is full, the item remains on the map
+                return true;
             }
-            return true;
+            return true; // Keep item if no collision or pickup
         });
 
         // Update particles
@@ -428,9 +270,11 @@ export class Game {
             return p.life > 0;
         });
 
-        // Check for round end
-        if (this.player1.health <= 0 || this.player2.health <= 0) {
-            this.endRound();
+        // Check for round end (Local Only - Online handled by server event)
+        if (this.gameMode === 'local') {
+            if (this.player1.health <= 0 || this.player2.health <= 0) {
+                this.endRound();
+            }
         }
     }
 
@@ -447,72 +291,113 @@ export class Game {
         }
     }
 
+    screenShake(time, intensity) {
+        this.shakeTime = time;
+        this.shakeIntensity = intensity;
+    }
+
+    // Local Round End
     endRound() {
         this.gameActive = false;
 
         if (this.player1.health > this.player2.health) {
             this.scores.p1++;
-            this.showAnnouncement('PLAYER 1 WINS!');
+            this.menuManager.showAnnouncement('PLAYER 1 WINS!');
         } else {
             this.scores.p2++;
-            this.showAnnouncement('PLAYER 2 WINS!');
+            this.menuManager.showAnnouncement('PLAYER 2 WINS!');
         }
 
-        document.getElementById('score-p1').textContent = this.scores.p1;
-        document.getElementById('score-p2').textContent = this.scores.p2;
-
+        this.menuManager.updateScores(this.scores.p1, this.scores.p2);
         setTimeout(() => this.initGame(), 3000);
     }
 
-    showAnnouncement(text) {
-        const announcement = document.getElementById('round-announcement');
-        announcement.textContent = text;
-        announcement.classList.add('show');
-        setTimeout(() => announcement.classList.remove('show'), 2000);
+    // Online Round End
+    onRoundEnd(isWin) {
+        if (isWin) {
+            this.scores.p1++;
+            this.menuManager.showAnnouncement('YOU WIN!');
+        } else {
+            this.scores.p2++;
+            this.menuManager.showAnnouncement('YOU LOSE!');
+        }
+
+        this.menuManager.updateScores(this.scores.p1, this.scores.p2);
+
+        // Wait for server to restart? Or restart strictly on timeout? 
+        // Original code: setTimeout(() => this.initOnlineGame(), 3000);
+        setTimeout(() => this.initOnlineGame(), 3000);
+    }
+
+    onOpponentDisconnected() {
+        this.gameActive = false;
+        alert('Opponent disconnected!');
+        this.menuManager.showMenu();
+        this.networkManager.disconnect();
     }
 
     draw() {
-        // Clear canvas
-        this.ctx.fillStyle = '#16213e';
+        // Clear canvas with shake
+        this.ctx.save();
+
+        if (this.shakeTime > 0) {
+            const dx = (Math.random() - 0.5) * this.shakeIntensity;
+            const dy = (Math.random() - 0.5) * this.shakeIntensity;
+            this.ctx.translate(dx, dy);
+        }
+
+        // Medieval Background (Dark Stone)
+        this.ctx.fillStyle = '#1a1918'; // Dark metallic/stone
         this.ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
 
-        // Draw grid background
-        this.ctx.strokeStyle = 'rgba(0, 255, 255, 0.1)';
-        this.ctx.lineWidth = 1;
-        for (let x = 0; x < CONFIG.CANVAS_WIDTH; x += 50) {
-            this.ctx.beginPath();
-            this.ctx.moveTo(x, 0);
-            this.ctx.lineTo(x, CONFIG.CANVAS_HEIGHT);
-            this.ctx.stroke();
-        }
-        for (let y = 0; y < CONFIG.CANVAS_HEIGHT; y += 50) {
-            this.ctx.beginPath();
-            this.ctx.moveTo(0, y);
-            this.ctx.lineTo(CONFIG.CANVAS_WIDTH, y);
-            this.ctx.stroke();
+        // Draw Castle Pillars/Background details (Simple)
+        this.ctx.fillStyle = '#262422';
+        for (let i = 0; i < 6; i++) {
+            this.ctx.fillRect(100 + i * 200, 50, 40, 500);
         }
 
-        // Draw platforms
-        this.platforms.forEach(platform => {
-            this.ctx.fillStyle = '#0f4c75';
-            this.ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
-            this.ctx.strokeStyle = '#00ffff';
-            this.ctx.lineWidth = 2;
-            this.ctx.strokeRect(platform.x, platform.y, platform.width, platform.height);
+        // Draw platforms (Stone/Wood style)
+        this.platforms.forEach((platform, index) => {
+            // Shadow
+            this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            this.ctx.fillRect(platform.x + 5, platform.y + 5, platform.width, platform.height);
+
+            // Block
+            // Ground is index 0 usually, or y > 500
+            if (platform.y > 500) {
+                this.ctx.fillStyle = '#3e2723'; // Dirt/Dark Ground
+                this.ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+                // Top Grass/Stone trim
+                this.ctx.fillStyle = '#2e7d32'; // Dark Green Grass
+                this.ctx.fillRect(platform.x, platform.y, platform.width, 10);
+            } else {
+                this.ctx.fillStyle = '#616161'; // Stone Grey
+                this.ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+                // Border/Texture
+                this.ctx.strokeStyle = '#424242';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(platform.x, platform.y, platform.width, platform.height);
+
+                // Bricks pattern
+                this.ctx.beginPath();
+                this.ctx.strokeStyle = '#424242';
+                for (let bx = platform.x; bx < platform.x + platform.width; bx += 20) {
+                    this.ctx.moveTo(bx, platform.y);
+                    this.ctx.lineTo(bx, platform.y + platform.height);
+                }
+                this.ctx.stroke();
+            }
         });
 
-        // Draw powerups
+        // Draw entities
         this.powerups.forEach(p => p.draw(this.ctx));
-
-        // Draw particles
         this.particles.forEach(p => p.draw(this.ctx));
-
-        // Draw projectiles
         this.projectiles.forEach(p => p.draw(this.ctx));
 
-        // Draw players
-        this.player1.draw(this.ctx);
-        this.player2.draw(this.ctx);
+        if (this.player1) this.player1.draw(this.ctx, this);
+        if (this.player2) this.player2.draw(this.ctx, this);
+
+        this.ctx.restore();
     }
 
     gameLoop() {
@@ -521,3 +406,4 @@ export class Game {
         requestAnimationFrame(() => this.gameLoop());
     }
 }
+

@@ -18,61 +18,61 @@ export const CONFIG = {
     DASH_COOLDOWN: 60,
     MELEE_RANGE: 50,
     MELEE_DAMAGE: 15,
-    KNOCKBACK_FORCE: 5,
+    KNOCKBACK_FORCE: 2.5,
     PROJECTILE_SPEED: 10,
     PROJECTILE_DAMAGE: 10,
     MAX_HEALTH: 100,
     ITEM_DURATION: 5000,
-    ITEM_SPAWN_INTERVAL: 15000,
+    ITEM_SPAWN_INTERVAL: 30000,
     MAX_ITEM_SLOTS: 2,
     ROUND_TIME: 99,
     LIFESTEAL_PERCENT: 0.2, // 20% lifesteal on hit
 };
 
-// Vampire Items
+// Medieval Items
 export const ITEMS = {
-    BLOOD_ORB: {
-        name: 'BLOOD_ORB',
-        icon: '🩸',
+    HEALTH_POTION: {
+        name: 'HEALTH_POTION',
+        icon: '🍷',
         color: '#ff0000',
         type: 'heal',
         value: 20,
-        description: 'Regenerate 20 HP'
+        description: 'Drink Potion (20 HP)'
     },
-    BAT_SWARM: {
-        name: 'BAT_SWARM',
-        icon: '🦇',
-        color: '#4a0e4e',
+    CROSSBOW: {
+        name: 'CROSSBOW',
+        icon: '🏹',
+        color: '#8b4513',
         type: 'projectile',
-        description: 'Bat Swarm Attack'
+        description: 'Fire Bolt'
     },
-    VAMPIRE_DASH: {
-        name: 'VAMPIRE_DASH',
-        icon: '🧛',
-        color: '#880e4f',
+    BERSERK: {
+        name: 'BERSERK_RAGE',
+        icon: '💢',
+        color: '#800000',
         type: 'buff',
-        description: 'Dash drains HP'
+        description: 'Sacrifice HP for Speed'
     },
-    HELLFIRE: {
-        name: 'HELLFIRE',
+    FIRE_SPELL: {
+        name: 'FIRE_SPELL',
         icon: '🔥',
-        color: '#ff5722',
+        color: '#ff4500',
         type: 'projectile',
         piercing: true,
-        description: 'Hellfire Blast'
+        description: 'Cast Fireball'
     },
-    SPEED: {
-        name: 'SPEED_BOOST',
-        icon: '⚡',
-        color: '#ffeb3b',
+    HASTE: {
+        name: 'HASTE_SCROLL',
+        icon: '📜',
+        color: '#ffd700',
         type: 'buff',
-        description: 'Speed Boost'
+        description: 'Run Faster'
     },
-    SHIELD: {
-        name: 'SHIELD',
+    IRON_SHIELD: {
+        name: 'IRON_SHIELD',
         icon: '🛡️',
-        color: '#2196f3',
+        color: '#a9a9a9',
         type: 'buff',
-        description: 'Shield'
+        description: 'Block Damage'
     },
 };
