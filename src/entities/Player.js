@@ -50,6 +50,17 @@ export class Player {
         this.dashDirX = 0;
         this.dashDirY = 0;
 
+        // Animation State (Current Angles for Interpolation)
+        this.anim = {
+            legL: 0, legR: 0,
+            legL_lower: 0, legR_lower: 0,
+            armL: 0, armR: 0,
+            armL_lower: 0, armR_lower: 0,
+            bodyRot: 0,
+            headY: -15,
+            yOffset: 0
+        };
+
         // Initial UI Update
         this.updateHealthBar();
         this.updateItemDisplay();
@@ -492,63 +503,140 @@ export class Player {
             ctx.stroke();
         }
 
-        // Sprite Rendering
-        if (game && game.spritesLoaded && game.spriteSheet) {
-            const frameWidth = game.spriteSheet.width / 3;
-            const frameHeight = game.spriteSheet.height / 2;
+        // --- PROCEDURAL STICK FIGURE ANIMATION ---
 
-            // Determine Row (Player 1 = 0, Player 2 = 1)
-            const row = (this.id === 1) ? 0 : 1;
+        ctx.save();
+        ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
 
-            // Determine Col (Animation State)
-            let col = 0; // Standing
-            if (this.meleeActive) {
-                col = 2; // Attacking
-            } else if (Math.abs(this.vx) > 0.5) {
-                // Running Animation (Toggle frame based on position or time? simplified to just run pose)
-                // If we want animation, we can use game.roundTime or a tick
-                // For now, static 'Run' pose is fine, or toggle based on x
-                col = 1;
+        // Base Scale & Direction
+        const scale = 1.2;
+        ctx.scale(this.facingRight ? scale : -scale, scale);
+
+        // Animation State Calculation
+        const time = Date.now() / 100;
+        let legL = 0, legR = 0, armL = 0, armR = 0, bodyRot = 0, headY = -15;
+        let armL_lower = 0, armR_lower = 0;
+        let legL_lower = 0, legR_lower = 0;
+
+        // State Machine for Poses
+        if (this.meleeActive) {
+            // ATTACK: Heavy Swing
+            const progress = 1 - (this.meleeCooldown / 20); // 0 to 1 approx
+            bodyRot = 0.2 + progress * 0.5; // Lean forward
+            armR = -Math.PI / 2 + progress * Math.PI; // Swing over head
+            armR_lower = -0.5; // Straightish sword arm
+            armL = 0.5; // Balance
+            legL = 0.5;
+            legR = -0.5;
+        } else if (!this.onGround) {
+            // JUMP / AIR
+            if (this.vy < 0) {
+                // Going Up
+                legL = 0.5; legL_lower = 1;
+                legR = -0.2; legR_lower = 0.5;
+                armL = -2; armR = -2; // Arms up
+            } else {
+                // Falling
+                legL = 0.2; legL_lower = 0.2;
+                legR = 0.1; legR_lower = 0.2;
+                armL = -2.5; armR = -2.5; // Flailing up
             }
+        } else if (Math.abs(this.vx) > 0.5) {
+            // RUNNING
+            const runSpeed = 0.8;
+            bodyRot = 0.2; // Lean forward
+            legL = Math.sin(time * 1.5) * 0.8;
+            legR = Math.sin(time * 1.5 + Math.PI) * 0.8;
+            legL_lower = Math.max(0, legL); // Knee bend
+            legR_lower = Math.max(0, legR);
 
-            const sx = col * frameWidth;
-            const sy = row * frameHeight;
-
-            ctx.save();
-            ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
-
-            if (!this.facingRight) {
-                ctx.scale(-1, 1);
-            }
-
-            // Draw Sprite (Adjust size to fit hitbox or slightly larger)
-            // Hitbox is 20x40. Sprite might be 32x32 or 64x64.
-            // Let's assume proportional drawing approx 64x64 centered to ensure it covers the hitbox
-            const drawSize = 64;
-            ctx.drawImage(
-                game.spriteSheet,
-                sx, sy, frameWidth, frameHeight,
-                -drawSize / 2, -drawSize / 2, drawSize, drawSize
-            );
-
-            ctx.restore();
-
+            armL = Math.sin(time * 1.5 + Math.PI) * 0.8;
+            armR = Math.sin(time * 1.5) * 0.8;
+            armL_lower = -0.5;
+            armR_lower = -0.5;
         } else {
-            // FALLBACK TO RECTANGLE
-            ctx.fillStyle = this.color;
-            ctx.fillRect(this.x, this.y, this.width, this.height);
-
-            // Arms (Fallback)
-            if (this.meleeActive) {
-                const armX = this.facingRight ? this.x + 13 : this.x - 8;
-                ctx.fillStyle = this.color;
-                ctx.fillRect(armX, this.y + 12, 8, 4);
-                // Weapon
-                ctx.fillStyle = '#ffff00';
-                const weaponX = this.facingRight ? this.x + this.width : this.x - 10;
-                ctx.fillRect(weaponX, this.y + 15, 10, 3);
-            }
+            // IDLE (Breathing)
+            headY = -15 + Math.sin(time) * 0.5;
+            armL = Math.sin(time) * 0.1;
+            armR = Math.sin(time + Math.PI) * 0.1;
+            legL = 0;
+            legR = 0;
         }
+
+        // --- DRAW SKELETON ---
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // 1. Body
+        ctx.beginPath();
+        ctx.moveTo(0, 0); // Hips
+        const neckX = Math.sin(bodyRot) * 15;
+        const neckY = -Math.cos(bodyRot) * 15;
+        ctx.lineTo(neckX, neckY); // Neck
+        ctx.stroke();
+
+        // 2. Head
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(neckX, neckY - 5, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        // White Face/Visor
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(neckX + 3, neckY - 5, 2, 0, Math.PI * 2); // Eye
+        ctx.fill();
+
+        // 3. Legs
+        const hipY = 0;
+        const legLen = 12;
+
+        // Leg Left
+        this.drawLimb(ctx, 0, hipY, legL, legL_lower, legLen, this.color);
+        // Leg Right
+        this.drawLimb(ctx, 0, hipY, legR, legR_lower, legLen, this.color);
+
+        // 4. Arms
+        const shoulderX = neckX;
+        const shoulderY = neckY + 3;
+        const armLen = 10;
+
+        // Arm Left (Back)
+        this.drawLimb(ctx, shoulderX, shoulderY, armL, armL_lower, armLen, this.color);
+
+        // Arm Right (Front & Weapon holder)
+        const handPos = this.drawLimb(ctx, shoulderX, shoulderY, armR, armR_lower, armLen, this.color);
+
+        // 5. Weapon (Sword)
+        // If has crossbow or other item, render differently?
+        // Default Sword
+        ctx.save();
+        ctx.translate(handPos.x, handPos.y);
+        ctx.rotate(armR + armR_lower + Math.PI / 2); // Align with hand
+
+        // Sword Handle
+        ctx.fillStyle = '#666';
+        ctx.fillRect(-2, -5, 4, 10);
+
+        // Crossguard
+        ctx.fillStyle = '#888';
+        ctx.fillRect(-6, -5, 12, 3);
+
+        // Blade
+        ctx.fillStyle = '#00ffff'; // Energy blade
+        if (this.id === 2) ctx.fillStyle = '#ff00ff';
+
+        // Glow
+        ctx.shadowBlur = 5;
+        ctx.shadowColor = ctx.fillStyle;
+
+        ctx.fillRect(-2, -35, 4, 30);
+
+        ctx.restore();
+
+        ctx.restore();
 
         // Speed effect particles or tint
         if (this.activeBuff === 'SPEED') {
@@ -571,6 +659,25 @@ export class Player {
             ctx.font = '10px "Press Start 2P"';
             ctx.fillText(`x${this.comboCount}`, this.x, this.y - 10);
         }
+    }
+
+    drawLimb(ctx, origX, origY, angle1, angle2, length, color) {
+        ctx.beginPath();
+        ctx.moveTo(origX, origY);
+
+        // Upper
+        const x1 = origX + Math.sin(angle1) * length;
+        const y1 = origY + Math.cos(angle1) * length;
+        ctx.lineTo(x1, y1);
+
+        // Lower
+        const x2 = x1 + Math.sin(angle1 + angle2) * length;
+        const y2 = y1 + Math.cos(angle1 + angle2) * length;
+        ctx.lineTo(x2, y2);
+
+        ctx.stroke();
+
+        return { x: x2, y: y2 };
     }
 }
 

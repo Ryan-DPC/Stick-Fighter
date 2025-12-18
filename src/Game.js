@@ -208,6 +208,19 @@ export class Game {
             this.shakeTime--;
         }
 
+        // Ambient Particles (Dust)
+        if (Math.random() < 0.1) {
+            const px = Math.random() * CONFIG.CANVAS_WIDTH;
+            const py = Math.random() * CONFIG.CANVAS_HEIGHT;
+            const p = new Particle(px, py, 'rgba(200, 200, 200, 0.1)');
+            p.vx = (Math.random() - 0.5) * 0.5;
+            p.vy = (Math.random() - 0.5) * 0.5;
+            p.maxLife = 100;
+            p.life = 100;
+            p.gravity = 0; // Floating dust
+            this.particles.push(p);
+        }
+
         // Update players
         if (this.player1) this.player1.update(this);
         if (this.player2) this.player2.update(this);
@@ -347,13 +360,21 @@ export class Game {
         }
 
         // Medieval Background (Dark Stone)
-        this.ctx.fillStyle = '#1a1918'; // Dark metallic/stone
+        // Background Gradient
+        const gradient = this.ctx.createLinearGradient(0, 0, 0, CONFIG.CANVAS_HEIGHT);
+        gradient.addColorStop(0, '#0f0e0d');
+        gradient.addColorStop(1, '#2c2a28');
+        this.ctx.fillStyle = gradient;
         this.ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
 
         // Draw Castle Pillars/Background details (Simple)
-        this.ctx.fillStyle = '#262422';
-        for (let i = 0; i < 6; i++) {
-            this.ctx.fillRect(100 + i * 200, 50, 40, 500);
+        this.ctx.fillStyle = '#1a1918';
+        for (let i = 0; i < 7; i++) {
+            this.ctx.fillRect(80 + i * 200, 50, 60, CONFIG.CANVAS_HEIGHT - 50);
+            // Pillar details
+            this.ctx.fillStyle = '#0f0e0d';
+            this.ctx.fillRect(90 + i * 200, 60, 40, CONFIG.CANVAS_HEIGHT - 70);
+            this.ctx.fillStyle = '#1a1918'; // Reset for next iteration base
         }
 
         // Draw platforms (Stone/Wood style)
