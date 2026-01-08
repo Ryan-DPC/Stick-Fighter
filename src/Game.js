@@ -5,6 +5,8 @@ import { Powerup } from './entities/Powerup.js';
 import { Particle } from './entities/Particle.js';
 import { MenuManager } from './managers/MenuManager.js';
 import { NetworkManager } from './managers/NetworkManager.js';
+import { SoundManager } from './managers/SoundManager.js';
+import { InputManager } from './managers/InputManager.js';
 
 export class Game {
     constructor() {
@@ -16,6 +18,8 @@ export class Game {
         // Managers
         this.menuManager = new MenuManager(this);
         this.networkManager = new NetworkManager(this);
+        this.soundManager = new SoundManager(this);
+        this.inputManager = new InputManager();
 
         this.player1 = null;
         this.player2 = null;
@@ -38,7 +42,7 @@ export class Game {
         // Sprite Loading with Chroma Key
         this.spritesLoaded = false;
         const tempImage = new Image();
-        tempImage.src = 'assets/sprites.png';
+        tempImage.src = 'assets/sprites_expanded.png';
         tempImage.onload = () => {
             // Create offscreen canvas to process image
             const canvas = document.createElement('canvas');
@@ -72,7 +76,61 @@ export class Game {
             this.spriteSheet = new Image();
             this.spriteSheet.src = canvas.toDataURL();
             this.spritesLoaded = true;
-            console.log('Sprites processed and loaded!');
+
+            // Store dimensions for Player to use
+            this.spriteSheetWidth = canvas.width;
+            this.spriteSheetHeight = canvas.height;
+            console.log('Sprites processed and loaded!', this.spriteSheetWidth, this.spriteSheetHeight);
+        };
+
+        // Load Background & Textures
+        this.bgImage = new Image();
+        this.bgImage.src = 'assets/dungeon_background.png';
+
+        this.platformPattern = null;
+        this.stoneTexture = new Image();
+        this.stoneTexture.src = 'assets/stone_texture.png';
+        this.stoneTexture.onload = () => {
+            this.platformPattern = this.ctx.createPattern(this.stoneTexture, 'repeat');
+        };
+
+
+
+        // Load Item Sprites (Remove Black Background)
+        this.itemSpriteSheet = null;
+        const tempItemImage = new Image();
+        tempItemImage.src = 'assets/items.png';
+        tempItemImage.onload = () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = tempItemImage.width;
+            canvas.height = tempItemImage.height;
+            ctx.drawImage(tempItemImage, 0, 0);
+
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imgData.data;
+
+            // Detect background color from top-left pixel
+            const bgR = data[0];
+            const bgG = data[1];
+            const bgB = data[2];
+            const tolerance = 30; // Higher tolerance for compression artifacts
+
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+
+                // Check if close to background color
+                if (Math.abs(r - bgR) < tolerance &&
+                    Math.abs(g - bgG) < tolerance &&
+                    Math.abs(b - bgB) < tolerance) {
+                    data[i + 3] = 0; // Transparent
+                }
+            }
+            ctx.putImageData(imgData, 0, 0);
+            this.itemSpriteSheet = new Image();
+            this.itemSpriteSheet.src = canvas.toDataURL();
         };
 
         this.setupEventListeners();
@@ -147,31 +205,8 @@ export class Game {
     }
 
     setupEventListeners() {
-        document.addEventListener('keydown', (e) => {
-            if (this.isChatting) return;
-
-            this.keys[e.key.toLowerCase()] = true;
-
-            // Player 1 controls
-            if (this.gameActive && this.player1) {
-                if (e.key === ' ') { e.preventDefault(); this.player1.useItem(this); }
-                if (e.key.toLowerCase() === 'e') this.player1.melee(this.player2, this); // Attack P1
-                if (e.key.toLowerCase() === 'q') this.player1.switchItemNext(); // Switch Item P1 (Moved from E)
-                if (e.key === 'Shift') { e.preventDefault(); this.player1.dash(this); }
-            }
-
-            // Player 2 controls (Only in Local Mode)
-            if (this.gameMode === 'local' && this.gameActive && this.player2) {
-                if (e.key === 'Enter') { e.preventDefault(); this.player2.useItem(this); }
-                if (e.key.toLowerCase() === 'l') this.player2.melee(this.player1, this); // Attack P2
-                if (e.key.toLowerCase() === 'k') this.player2.switchItemNext(); // Switch Item P2
-                if (e.key === 'Control') this.player2.dash(this);
-            }
-        });
-
-        document.addEventListener('keyup', (e) => {
-            this.keys[e.key.toLowerCase()] = false;
-        });
+        // Chat and UI listeners can remain here or be moved to InputManager later.
+        // For now, InputManager handles game controls.
     }
 
     syncOnlineState() {
@@ -192,8 +227,14 @@ export class Game {
 
         const types = Object.keys(ITEMS);
         const type = types[Math.floor(Math.random() * types.length)];
-        const x = 200 + Math.random() * 800;
-        const y = 100 + Math.random() * 300;
+
+        // Pick a random platform to spawn ON
+        // Exclude ground (index 0 usually) if we want interesting spawns, 
+        // but ground is fine too. Let's include all.
+        const platform = this.platforms[Math.floor(Math.random() * this.platforms.length)];
+
+        const x = platform.x + Math.random() * (platform.width - 20); // Random X on platform
+        const y = platform.y - 35; // 35px above platform top (Item is 20-30px tall)
 
         this.powerups.push(new Powerup(x, y, type));
 
@@ -222,8 +263,14 @@ export class Game {
         }
 
         // Update players
-        if (this.player1) this.player1.update(this);
-        if (this.player2) this.player2.update(this);
+        if (this.player1) {
+            const input1 = this.inputManager.getInput(1);
+            this.player1.update(this, input1);
+        }
+        if (this.player2) {
+            const input2 = this.inputManager.getInput(2);
+            this.player2.update(this, input2);
+        }
 
         // Update projectiles
         this.projectiles = this.projectiles.filter(p => {
@@ -234,7 +281,8 @@ export class Game {
             if (p.owner !== 1 && this.checkCollision(p, this.player1)) {
                 if (!p.hitTargets.has(this.player1.id)) {
                     this.player1.takeDamage(CONFIG.PROJECTILE_DAMAGE, this);
-                    this.createHitParticles(p.x, p.y, '#ff0000');
+                    this.createHitParticles(p.x, p.y, '#ff0000', 'blood');
+                    this.soundManager.playHit();
                     this.screenShake(10, 5); // Shake!
                     p.hitTargets.add(this.player1.id);
                     if (!p.piercing) return false;
@@ -243,7 +291,8 @@ export class Game {
             if (p.owner !== 2 && this.checkCollision(p, this.player2)) {
                 if (!p.hitTargets.has(this.player2.id)) {
                     this.player2.takeDamage(CONFIG.PROJECTILE_DAMAGE, this);
-                    this.createHitParticles(p.x, p.y, '#ff0000');
+                    this.createHitParticles(p.x, p.y, '#ff0000', 'blood');
+                    this.soundManager.playHit();
                     this.screenShake(10, 5); // Shake!
                     p.hitTargets.add(this.player2.id);
                     if (!p.piercing) return false;
@@ -259,7 +308,8 @@ export class Game {
             if (this.checkCollision(p, this.player1)) {
                 if (this.player1.pickupItem(p.type)) {
                     const itemColor = ITEMS[p.type] ? ITEMS[p.type].color : '#ffffff';
-                    this.createHitParticles(p.x, p.y, itemColor);
+                    this.createHitParticles(p.x, p.y, itemColor, 'spark');
+                    this.soundManager.playPickup();
                     return false; // Remove item
                 }
                 // If player1's inventory is full, the item remains on the map
@@ -268,7 +318,8 @@ export class Game {
             if (this.checkCollision(p, this.player2)) {
                 if (this.player2.pickupItem(p.type)) {
                     const itemColor = ITEMS[p.type] ? ITEMS[p.type].color : '#ffffff';
-                    this.createHitParticles(p.x, p.y, itemColor);
+                    this.createHitParticles(p.x, p.y, itemColor, 'spark');
+                    this.soundManager.playPickup();
                     return false; // Remove item
                 }
                 // If player2's inventory is full, the item remains on the map
@@ -298,9 +349,9 @@ export class Game {
             obj1.y + obj1.height > obj2.y;
     }
 
-    createHitParticles(x, y, color) {
-        for (let i = 0; i < 10; i++) {
-            this.particles.push(new Particle(x, y, color));
+    createHitParticles(x, y, color, type = 'normal') {
+        for (let i = 0; i < 15; i++) {
+            this.particles.push(new Particle(x, y, color, type));
         }
     }
 
@@ -360,21 +411,15 @@ export class Game {
         }
 
         // Medieval Background (Dark Stone)
-        // Background Gradient
-        const gradient = this.ctx.createLinearGradient(0, 0, 0, CONFIG.CANVAS_HEIGHT);
-        gradient.addColorStop(0, '#0f0e0d');
-        gradient.addColorStop(1, '#2c2a28');
-        this.ctx.fillStyle = gradient;
-        this.ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
-
-        // Draw Castle Pillars/Background details (Simple)
-        this.ctx.fillStyle = '#1a1918';
-        for (let i = 0; i < 7; i++) {
-            this.ctx.fillRect(80 + i * 200, 50, 60, CONFIG.CANVAS_HEIGHT - 50);
-            // Pillar details
-            this.ctx.fillStyle = '#0f0e0d';
-            this.ctx.fillRect(90 + i * 200, 60, 40, CONFIG.CANVAS_HEIGHT - 70);
-            this.ctx.fillStyle = '#1a1918'; // Reset for next iteration base
+        if (this.bgImage.complete && this.bgImage.naturalWidth !== 0) {
+            this.ctx.drawImage(this.bgImage, 0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
+        } else {
+            // Fallback Gradient
+            const gradient = this.ctx.createLinearGradient(0, 0, 0, CONFIG.CANVAS_HEIGHT);
+            gradient.addColorStop(0, '#0f0e0d');
+            gradient.addColorStop(1, '#2c2a28');
+            this.ctx.fillStyle = gradient;
+            this.ctx.fillRect(0, 0, CONFIG.CANVAS_WIDTH, CONFIG.CANVAS_HEIGHT);
         }
 
         // Draw platforms (Stone/Wood style)
@@ -383,35 +428,36 @@ export class Game {
             this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
             this.ctx.fillRect(platform.x + 5, platform.y + 5, platform.width, platform.height);
 
-            // Block
-            // Ground is index 0 usually, or y > 500
-            if (platform.y > 500) {
-                this.ctx.fillStyle = '#3e2723'; // Dirt/Dark Ground
-                this.ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
-                // Top Grass/Stone trim
-                this.ctx.fillStyle = '#2e7d32'; // Dark Green Grass
-                this.ctx.fillRect(platform.x, platform.y, platform.width, 10);
-            } else {
-                this.ctx.fillStyle = '#616161'; // Stone Grey
-                this.ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
-                // Border/Texture
-                this.ctx.strokeStyle = '#424242';
-                this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(platform.x, platform.y, platform.width, platform.height);
+            // Texture or Fallback
+            if (this.platformPattern) {
+                this.ctx.save();
+                this.ctx.translate(platform.x, platform.y);
+                this.ctx.fillStyle = this.platformPattern;
+                this.ctx.fillRect(0, 0, platform.width, platform.height);
 
-                // Bricks pattern
-                this.ctx.beginPath();
-                this.ctx.strokeStyle = '#424242';
-                for (let bx = platform.x; bx < platform.x + platform.width; bx += 20) {
-                    this.ctx.moveTo(bx, platform.y);
-                    this.ctx.lineTo(bx, platform.y + platform.height);
+                // Border
+                this.ctx.strokeStyle = '#000';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(0, 0, platform.width, platform.height);
+                this.ctx.restore();
+            } else {
+                // Fallback procedural
+                if (platform.y > 500) {
+                    this.ctx.fillStyle = '#3e2723';
+                    this.ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+                    this.ctx.fillStyle = '#2e7d32';
+                    this.ctx.fillRect(platform.x, platform.y, platform.width, 10);
+                } else {
+                    this.ctx.fillStyle = '#616161';
+                    this.ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+                    this.ctx.strokeStyle = '#424242';
+                    this.ctx.strokeRect(platform.x, platform.y, platform.width, platform.height);
                 }
-                this.ctx.stroke();
             }
         });
 
         // Draw entities
-        this.powerups.forEach(p => p.draw(this.ctx));
+        this.powerups.forEach(p => p.draw(this.ctx, this));
         this.particles.forEach(p => p.draw(this.ctx));
         this.projectiles.forEach(p => p.draw(this.ctx));
 

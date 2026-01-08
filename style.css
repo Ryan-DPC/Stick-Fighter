@@ -27,6 +27,18 @@ body {
     align-items: center;
 }
 
+#game-screen::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle, transparent 50%, rgba(0, 0, 0, 0.8) 100%);
+    pointer-events: none;
+    z-index: 10;
+}
+
 /* Menu Styles */
 .menu-container {
     text-align: center;
@@ -157,35 +169,51 @@ body {
 
 /* Game Screen */
 #game-screen {
-    flex-direction: column;
-    background: #111;
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    background: #000;
+    overflow: hidden;
 }
 
-#hud {
+#gameCanvas {
+    /* Scale canvas to fit screen while maintaining aspect ratio */
     width: 100%;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    padding: 1rem 2rem;
-    background: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiM0ZTMyMjgiLz48L3N2Zz4=');
-    /* Leather texture */
-    border-bottom: 4px solid #8b4513;
-    border-top: 4px solid #8b4513;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-    z-index: 20;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    image-rendering: pixelated;
+    /* Sharp pixels */
+}
+
+/* Heads Up Display (HUD) */
+#hud {
     position: absolute;
     top: 0;
+    left: 0;
+    width: 100%;
+    padding: 20px 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    /* Floating Transparent UI */
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.9) 0%, transparent 100%);
+    z-index: 20;
+    pointer-events: none;
+    /* Let clicks pass through */
+    border: none;
+    box-shadow: none;
 }
 
 .player-hud {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    width: 300px;
+    gap: 5px;
+    width: 350px;
 }
 
 .player-name {
-    font-size: 1.2rem;
+    font-size: 1.5rem;
     color: #f5f5f5;
     text-shadow: 2px 2px 0 #000;
 }
